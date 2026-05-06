@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Опрос — панель ответов</title>
+<style>
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #334155;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --ok: #34d399;
+  --err: #f87171;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px;
+}
+h1 { font-size: 1.35rem; margin-bottom: 8px; }
+.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto 20px;
+}
+label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+input[type="email"], input[type="password"] {
+  width: 100%;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0f172a;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+button.outline {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.status {
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+.status.ok { color: var(--ok); }
+.status.err { color: var(--err); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.badge {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #334155;
+  color: var(--muted);
+}
+.badge.live {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--ok);
+}
+.badge.err {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--err);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; }
+td.mono {
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 520px;
+}
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>Панель опроса «Капитанская дочка»</h1>
+<p class="sub">Данные из Supabase в реальном времени. Войдите учётной записью, созданной в Supabase Authentication.</p>
+
+<div id="login-panel" class="panel">
+  <label for="email">Email администратора</label>
+  <input id="email" type="email" autocomplete="username" placeholder="admin@example.com">
+
+  <label for="password">Пароль</label>
+  <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+
+  <button type="button" id="btn-login">Войти</button>
+  <button type="button" id="btn-logout" class="outline hidden">Выйти</button>
+  <div id="login-msg" class="status"></div>
+</div>
+
+<div id="dash-panel" class="panel hidden">
+  <div class="toolbar">
+    <span class="badge live" id="live-badge">Realtime: подключение…</span>
+    <span class="badge" id="count-badge">Ответов: 0</span>
+    <button type="button" id="btn-refresh" class="outline">Обновить сейчас</button>
+    <button type="button" id="btn-logout2" class="outline">Выйти</button>
+  </div>
+  <div id="stats" style="margin: 12px 0 18px;"></div>
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Время (UTC)</th>
+          <th>Сводка</th>
+          <th>JSON ответов</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+<script>
+
+const SUPABASE_URL = 'https://grqskftfsikbyrohkoac.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdycXNrZnRmc2lrYnlyb2hrb2FjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NTIyMjAsImV4cCI6MjA5MzAyODIyMH0.ij1K9HodEQC-9WF5n9RRZavBgV50KLvWI-BWgMmHD9o';
+
+let client = null;
+let channel = null;
+const rowsEl = document.getElementById('rows');
+const loginPanel = document.getElementById('login-panel');
+const dashPanel = document.getElementById('dash-panel');
+const loginMsg = document.getElementById('login-msg');
+const liveBadge = document.getElementById('live-badge');
+const countBadge = document.getElementById('count-badge');
+const statsEl = document.getElementById('stats');
+
+function setLoginMsg(text, ok) {
+  loginMsg.textContent = text || '';
+  loginMsg.className = 'status ' + (ok === true ? 'ok' : ok === false ? 'err' : '');
+}
+
+function summarizeAnswers(ans) {
+  if (!ans || typeof ans !== 'object') return '—';
+  const keys = Object.keys(ans).filter(k => !k.endsWith('_custom')).sort((a, b) => Number(a) - Number(b));
+  const parts = keys.slice(0, 3).map(k => {
+    const c = ans[k + '_custom'];
+    const line = String(ans[k] || '').slice(0, 80);
+    return `${k}: ${line}${c ? ' …' : ''}`;
+  });
+  const more = keys.length > 3 ? ` +${keys.length - 3}` : '';
+  return parts.join('; ') + more;
+}
+
+function rowHtml(row) {
+  const t = row.created_at ? new Date(row.created_at).toISOString().replace('T', ' ').slice(0, 19) : '';
+  const summary = summarizeAnswers(row.answers);
+  const json = JSON.stringify(row.answers || {}, null, 0);
+  return `<tr><td class="mono">${t}</td><td>${summary}</td><td class="mono">${json}</td></tr>`;
+}
+
+function renderRows(data) {
+  rowsEl.innerHTML = data.map(rowHtml).join('');
+  countBadge.textContent = 'Ответов: ' + data.length;
+}
+
+function classifyAnswer(label) {
+  const s = String(label || '').toLowerCase();
+  if (s.includes('свой ответ')) return 'custom';
+  if (s.includes('ии')) return 'ai';
+  if (s.includes('худож')) return 'human';
+  if (s.includes('оба')) return 'both';
+  return 'other';
+}
+
+function computeStats(data) {
+  const perQ = {}; // qid -> {ai,human,both,other,total}
+  let ai = 0, human = 0, both = 0, other = 0, total = 0;
+  for (const row of (data || [])) {
+    const ans = row.answers || {};
+    for (let q = 1; q <= 20; q++) {
+      const v = ans[String(q)];
+      if (!v) continue;
+      const k = classifyAnswer(v);
+      perQ[q] ||= { ai: 0, human: 0, both: 0, other: 0, total: 0 };
+      perQ[q][k] = (perQ[q][k] || 0) + 1;
+      perQ[q].total += 1;
+    }
+  }
+
+  for (const q of Object.keys(perQ)) {
+    const s = perQ[q];
+    ai += s.ai || 0;
+    human += s.human || 0;
+    both += s.both || 0;
+    other += (s.other || 0) + (s.custom || 0);
+    total += s.total || 0;
+  }
+  const pct = (x) => (total ? Math.round((x * 1000) / total) / 10 : 0);
+  return { perQ, totalAnswers: (data || []).length, ai, human, both, other, total, aiPct: pct(ai), humanPct: pct(human), bothPct: pct(both) };
+}
+
+function renderStats(data) {
+  if (!statsEl) return;
+  const st = computeStats(data);
+  const top = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:#0f172a;">
+        <div style="color:var(--muted);font-size:0.8rem;">За ИИ</div>
+        <div style="font-size:1.25rem;font-weight:800;">${st.aiPct}%</div>
+        <div style="color:var(--muted);font-size:0.8rem;">${st.ai} из ${st.total}</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:#0f172a;">
+        <div style="color:var(--muted);font-size:0.8rem;">За художника</div>
+        <div style="font-size:1.25rem;font-weight:800;">${st.humanPct}%</div>
+        <div style="color:var(--muted);font-size:0.8rem;">${st.human} из ${st.total}</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:#0f172a;">
+        <div style="color:var(--muted);font-size:0.8rem;">Оба / другое</div>
+        <div style="font-size:1.25rem;font-weight:800;">${st.bothPct}%</div>
+        <div style="color:var(--muted);font-size:0.8rem;">${st.both} «оба» + ${st.other} другое</div>
+      </div>
+    </div>
+    <div style="color:var(--muted);font-size:0.85rem;margin-bottom:8px;">
+      Всего анкет: <b style="color:var(--text)">${st.totalAnswers}</b>. Сводка считается по всем ответам на вопросы (1–20) во всех анкетах.
+    </div>
+  `;
+  const qRows = Object.keys(st.perQ).sort((a,b)=>Number(a)-Number(b)).map((q) => {
+    const s = st.perQ[q];
+    const tp = s.total || 0;
+    const p = (x) => (tp ? Math.round((x * 1000) / tp) / 10 : 0);
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#0f172a;margin:8px 0;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+        <div style="font-weight:700;">Вопрос ${q}</div>
+        <div style="color:var(--muted);font-size:0.8rem;">Ответов: ${tp}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px;">
+        <div><div style="color:var(--muted);font-size:0.75rem;">ИИ</div><div style="font-weight:800;">${p(s.ai||0)}%</div></div>
+        <div><div style="color:var(--muted);font-size:0.75rem;">Художник</div><div style="font-weight:800;">${p(s.human||0)}%</div></div>
+        <div><div style="color:var(--muted);font-size:0.75rem;">Оба</div><div style="font-weight:800;">${p(s.both||0)}%</div></div>
+        <div><div style="color:var(--muted);font-size:0.75rem;">Другое</div><div style="font-weight:800;">${p(s.other||0)}%</div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  statsEl.innerHTML = top + qRows;
+}
+
+async function loadRows() {
+  const { data, error } = await client
+    .from('survey_responses')
+    .select('id,created_at,answers')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) {
+    liveBadge.textContent = 'Ошибка загрузки: ' + error.message;
+    liveBadge.className = 'badge err';
+    return;
+  }
+  renderRows(data || []);
+  renderStats(data || []);
+}
+
+function subscribeRealtime() {
+  if (channel) {
+    client.removeChannel(channel);
+    channel = null;
+  }
+  channel = client
+    .channel('survey-admin')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'survey_responses' },
+      () => loadRows()
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        liveBadge.textContent = 'Realtime: подключено';
+        liveBadge.className = 'badge live';
+      } else if (status === 'CHANNEL_ERROR') {
+        liveBadge.textContent = 'Realtime: ошибка (проверьте Replication в Supabase)';
+        liveBadge.className = 'badge err';
+      }
+    });
+}
+
+function showDash(show) {
+  loginPanel.querySelector('#btn-login').classList.toggle('hidden', show);
+  loginPanel.querySelector('#email').classList.toggle('hidden', show);
+  loginPanel.querySelector('#password').classList.toggle('hidden', show);
+  loginPanel.querySelector('label[for="email"]').classList.toggle('hidden', show);
+  loginPanel.querySelector('label[for="password"]').classList.toggle('hidden', show);
+  document.getElementById('btn-logout').classList.toggle('hidden', !show);
+  dashPanel.classList.toggle('hidden', !show);
+}
+
+document.getElementById('btn-login').onclick = async () => {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  if (!SUPABASE_URL.startsWith('http') || SUPABASE_ANON_KEY.length < 20) {
+    setLoginMsg('Укажите SUPABASE_URL и SUPABASE_ANON_KEY в survey-admin.html', false);
+    return;
+  }
+  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  setLoginMsg('Вход…', null);
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) {
+    setLoginMsg(error.message, false);
+    return;
+  }
+  setLoginMsg('Успешный вход.', true);
+  showDash(true);
+  await loadRows();
+  subscribeRealtime();
+};
+
+document.getElementById('btn-logout').onclick = async () => {
+  if (client) await client.auth.signOut();
+  showDash(false);
+  rowsEl.innerHTML = '';
+  setLoginMsg('Вы вышли.', true);
+};
+
+document.getElementById('btn-logout2').onclick = () => document.getElementById('btn-logout').click();
+
+document.getElementById('btn-refresh').onclick = () => loadRows();
+</script>
+</body>
+</html>
