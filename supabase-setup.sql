@@ -38,3 +38,6 @@ alter publication supabase_realtime add table public.survey_responses;
 -- Дальше вручную:
 -- 1) Authentication → Users → Add user — создайте админа (email + пароль).
 -- 2) При необходимости отключите «Confirm email» для проекта или подтвердите почту админа.
+--
+-- Диаграммы на главной странице (публичная статистика): выполните также скрипт supabase-stats.sql
+-- (функция survey_public_stats — только агрегаты, без выдачи сырых ответов анонимным пользователям).
