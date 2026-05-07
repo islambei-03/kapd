@@ -27,7 +27,6 @@
 
     const total = payload.total_responses || 0;
     const ov = payload.overall || { ai: 0, human: 0, both: 0, other: 0 };
-    const byQ = payload.by_question || {};
 
     if (!total) {
       el.innerHTML =
@@ -37,29 +36,16 @@
 
     el.innerHTML = '';
 
-    const row = document.createElement('div');
-    row.style.display = 'grid';
-    row.style.gridTemplateColumns = 'minmax(220px, 1fr) minmax(260px, 2fr)';
-    row.style.gap = '16px';
-    row.style.alignItems = 'stretch';
 
     const cardPie = document.createElement('div');
     cardPie.className = 'survey-chart-card';
     cardPie.innerHTML =
-      '<div class="survey-chart-title">Общее распределение ответов</div><canvas id="survey-chart-overall"></canvas>';
-
-    const cardBar = document.createElement('div');
-    cardBar.className = 'survey-chart-card';
-    cardBar.innerHTML =
-      '<div class="survey-chart-title">По вопросам</div><div class="survey-chart-scroll"><canvas id="survey-chart-byq"></canvas></div>';
-
-    if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) {
-      row.style.gridTemplateColumns = '1fr';
-    }
-
-    row.appendChild(cardPie);
-    row.appendChild(cardBar);
-    el.appendChild(row);
+      '<div class="survey-chart-title">Общее распределение ответов</div>' +
+      '<div class="survey-chart-note" style="margin:6px 0 10px;">Приняли участие: <strong>' +
+      String(total) +
+      '</strong></div>' +
+      '<canvas id="survey-chart-overall"></canvas>';
+    el.appendChild(cardPie);
 
     const Chart = window.Chart;
     if (!Chart || typeof Chart !== 'function') {
@@ -71,7 +57,6 @@
     }
 
     const pieCtx = document.getElementById('survey-chart-overall');
-    const barCtx = document.getElementById('survey-chart-byq');
 
     const labelsOv = ['За ИИ', 'За художника', '«Оба»', 'Прочее'];
     const dataOv = [Number(ov.ai) || 0, Number(ov.human) || 0, Number(ov.both) || 0, Number(ov.other) || 0];
@@ -103,79 +88,6 @@
       })
     );
 
-    const qids = Object.keys(byQ)
-      .map(function (k) {
-        return parseInt(k, 10);
-      })
-      .filter(function (n) {
-        return !isNaN(n);
-      })
-      .sort(function (a, b) {
-        return a - b;
-      });
-
-    const labelsQ = qids.map(function (id) {
-      return 'Вопрос ' + id;
-    });
-
-    function rowVals(key) {
-      return qids.map(function (id) {
-        const cell = byQ[String(id)] || {};
-        return Number(cell[key]) || 0;
-      });
-    }
-
-    // Делает диаграмму «по вопросам» читабельной: высота зависит от кол-ва вопросов + скролл.
-    const barScroll = cardBar.querySelector('.survey-chart-scroll');
-    const perRow = 20; // px per question
-    const barHeight = Math.max(220, qids.length * perRow + 40);
-    if (barScroll) {
-      barScroll.style.maxHeight = '520px';
-      barScroll.style.overflowY = 'auto';
-      barScroll.style.paddingRight = '6px';
-    }
-    if (barCtx) {
-      // Chart.js уважает высоту canvas при maintainAspectRatio=false
-      barCtx.height = barHeight;
-    }
-
-    charts.push(
-      new Chart(barCtx, {
-        type: 'bar',
-        data: {
-          labels: labelsQ,
-          datasets: [
-            { label: 'ИИ', data: rowVals('ai'), backgroundColor: '#7cb8e8', stack: 's' },
-            { label: 'Художник', data: rowVals('human'), backgroundColor: '#d4b878', stack: 's' },
-            { label: 'Оба', data: rowVals('both'), backgroundColor: '#9aa7c4', stack: 's' },
-            { label: 'Прочее', data: rowVals('other'), backgroundColor: '#6b7a90', stack: 's' },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          indexAxis: 'y',
-          scales: {
-            x: {
-              stacked: true,
-              ticks: { color: chartFontColor(), precision: 0 },
-              grid: { color: chartGridColor() },
-            },
-            y: {
-              stacked: true,
-              ticks: { color: chartFontColor(), font: { size: 11 }, autoSkip: false },
-              grid: { display: false },
-            },
-          },
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { color: chartFontColor(), boxWidth: 12, font: { size: 12 } },
-            },
-          },
-        },
-      })
-    );
   }
 
   window.mountKapSurveyStats = function mountKapSurveyStats(cfg) {
