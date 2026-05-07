@@ -33,7 +33,7 @@ agg_overall as (
   select
     count(*) filter (where bucket = 'ai') as ai,
     count(*) filter (where bucket = 'human') as human,
-    count(*) filter (where bucket = 'both') as both,
+    count(*) filter (where bucket = 'both') as both_cnt,
     count(*) filter (where bucket = 'other') as other
   from classified
 ),
@@ -41,7 +41,7 @@ agg_by_q as (
   select qkey,
          count(*) filter (where bucket = 'ai') as ai,
          count(*) filter (where bucket = 'human') as human,
-         count(*) filter (where bucket = 'both') as both,
+         count(*) filter (where bucket = 'both') as both_cnt,
          count(*) filter (where bucket = 'other') as other
   from classified
   group by qkey
@@ -52,7 +52,7 @@ by_question as (
            jsonb_build_object(
              'ai', ai,
              'human', human,
-             'both', both,
+             'both', both_cnt,
              'other', other
            )
          ), '{}'::jsonb) as obj
@@ -64,7 +64,7 @@ select jsonb_build_object(
     select jsonb_build_object(
       'ai', ai,
       'human', human,
-      'both', both,
+      'both', both_cnt,
       'other', other
     )
     from agg_overall
