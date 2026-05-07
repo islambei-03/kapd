@@ -60,7 +60,8 @@
 
     const labelsOv = ['За ИИ', 'За художника', '«Оба»', 'Прочее'];
     const dataOv = [Number(ov.ai) || 0, Number(ov.human) || 0, Number(ov.both) || 0, Number(ov.other) || 0];
-    const colorsOv = ['#7cb8e8', '#d4b878', '#9aa7c4', '#6b7a90'];
+    // Более контрастные цвета для тёмной темы
+    const colorsOv = ['#2FD7FF', '#FFD23F', '#B86BFF', '#FF4D6D'];
 
     charts.push(
       new Chart(pieCtx, {
