@@ -37,15 +37,6 @@
 
     el.innerHTML = '';
 
-    const summary = document.createElement('p');
-    summary.className = 'survey-chart-note';
-    summary.style.marginBottom = '12px';
-    summary.textContent =
-      'Всего анкет в базе: ' +
-      total +
-      '. Ниже — распределение вариантов по тем же правилам, что и в админ-панели («ИИ», «художник», «оба», прочее).';
-    el.appendChild(summary);
-
     const row = document.createElement('div');
     row.style.display = 'grid';
     row.style.gridTemplateColumns = 'minmax(220px, 1fr) minmax(260px, 2fr)';
@@ -60,7 +51,7 @@
     const cardBar = document.createElement('div');
     cardBar.className = 'survey-chart-card';
     cardBar.innerHTML =
-      '<div class="survey-chart-title">По вопросам (стопкой: ИИ / художник / оба / прочее)</div><canvas id="survey-chart-byq"></canvas>';
+      '<div class="survey-chart-title">По вопросам</div><div class="survey-chart-scroll"><canvas id="survey-chart-byq"></canvas></div>';
 
     if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) {
       row.style.gridTemplateColumns = '1fr';
@@ -134,6 +125,20 @@
       });
     }
 
+    // Делает диаграмму «по вопросам» читабельной: высота зависит от кол-ва вопросов + скролл.
+    const barScroll = cardBar.querySelector('.survey-chart-scroll');
+    const perRow = 20; // px per question
+    const barHeight = Math.max(220, qids.length * perRow + 40);
+    if (barScroll) {
+      barScroll.style.maxHeight = '520px';
+      barScroll.style.overflowY = 'auto';
+      barScroll.style.paddingRight = '6px';
+    }
+    if (barCtx) {
+      // Chart.js уважает высоту canvas при maintainAspectRatio=false
+      barCtx.height = barHeight;
+    }
+
     charts.push(
       new Chart(barCtx, {
         type: 'bar',
@@ -148,23 +153,24 @@
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           indexAxis: 'y',
           scales: {
             x: {
               stacked: true,
-              ticks: { color: chartFontColor() },
+              ticks: { color: chartFontColor(), precision: 0 },
               grid: { color: chartGridColor() },
             },
             y: {
               stacked: true,
-              ticks: { color: chartFontColor(), font: { size: 10 } },
+              ticks: { color: chartFontColor(), font: { size: 11 }, autoSkip: false },
               grid: { display: false },
             },
           },
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: chartFontColor(), boxWidth: 12 },
+              labels: { color: chartFontColor(), boxWidth: 12, font: { size: 12 } },
             },
           },
         },
